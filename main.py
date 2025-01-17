@@ -1,7 +1,9 @@
 import pandas as pd
 import uvicorn
+import spacy
 from fastapi import FastAPI
 from training import LoanApprovalPredictionProcess
+from textblob import TextBlob
 
 app = FastAPI()
 
@@ -29,6 +31,46 @@ def predict_loan_application(data: dict):
         result = loan_predictor.predict(new_data)
 
         return {"loan_approved": result}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post('/nlp/grammar-spelling-checker')
+def nlp_grammar_spelling(data: dict):
+    try:
+        text = data.get("text", "")
+        doc = nlp(text)
+        entities = [(ent.text, ent.label_) for ent in doc.ents]
+        grammar_errors = []
+        if not text.strip().endswith(('.', '!', '?')):
+            grammar_errors.append(
+                f"Sentence should end with punctuation at position {len(text)}")
+        blob = TextBlob(text)
+        corrected_text = str(blob.correct())
+        spelling_errors = []
+        for word, corrected_word in zip(text.split(), corrected_text.split()):
+            if word.lower() != corrected_word.lower():
+                spelling_errors.append(
+                    f"'{word}' should be '{corrected_word}'")
+
+        words = [token.text for token in doc if token.is_alpha]
+        word_count = len(words)
+        sentence_count = len(list(doc.sents))
+        avg_word_length = sum(len(word) for word in words) / \
+            word_count if word_count > 0 else 0
+
+        return {
+            "entities_found": entities,
+            "grammar_errors": grammar_errors,
+            "spelling_errors": spelling_errors,
+            "statistics": {
+                "word_count": word_count,
+                "sentence_count": sentence_count,
+                "average_word_length": avg_word_length
+            },
+            "corrected_text": corrected_text
+        }
 
     except Exception as e:
         return {"error": str(e)}
