@@ -1,11 +1,12 @@
 import pandas as pd
 import uvicorn
-import spacy
 from fastapi import FastAPI
 from training import LoanApprovalPredictionProcess
+from spellchecker import SpellChecker
 from textblob import TextBlob
 
 app = FastAPI()
+spell = SpellChecker()
 
 
 @app.post('/predict/loan-application/')
@@ -39,32 +40,36 @@ def predict_loan_application(data: dict):
 @app.post('/nlp/grammar-spelling-checker')
 def nlp_grammar_spelling(data: dict):
     try:
-        nlp = spacy.load('en_core_web_sm')
         text = data.get("text", "")
-        doc = nlp(text)
-        entities = [(ent.text, ent.label_) for ent in doc.ents]
+
+        # Grammar check: basic punctuation rule
         grammar_errors = []
         if not text.strip().endswith(('.', '!', '?')):
             grammar_errors.append(
                 f"Sentence should end with punctuation at position {len(text)}")
+
+        # Spelling check with pyspellchecker
+        words = text.split()
+        misspelled = spell.unknown(words)
+        spelling_errors = []
+        for word in misspelled:
+            corrected_word = spell.correction(word)
+            spelling_errors.append(f"'{word}' should be '{corrected_word}'")
+
+        # TextBlob for grammar correction
         blob = TextBlob(text)
         corrected_text = str(blob.correct())
-        spelling_errors = []
-        for word, corrected_word in zip(text.split(), corrected_text.split()):
-            if word.lower() != corrected_word.lower():
-                spelling_errors.append(
-                    f"'{word}' should be '{corrected_word}'")
 
-        words = [token.text for token in doc if token.is_alpha]
+        # Word and sentence statistics
         word_count = len(words)
-        sentence_count = len(list(doc.sents))
+        # Estimate number of sentences based on periods
+        sentence_count = len(text.split('.'))
         avg_word_length = sum(len(word) for word in words) / \
             word_count if word_count > 0 else 0
 
         return {
-            "entities_found": entities,
-            "grammar_errors": grammar_errors,
             "spelling_errors": spelling_errors,
+            "grammar_errors": grammar_errors,
             "statistics": {
                 "word_count": word_count,
                 "sentence_count": sentence_count,
