@@ -39,6 +39,7 @@ def predict_loan_application(data: dict):
 @app.post('/nlp/grammar-spelling-checker')
 def nlp_grammar_spelling(data: dict):
     try:
+        nlp = spacy.load('en_core_web_sm')
         text = data.get("text", "")
         doc = nlp(text)
         entities = [(ent.text, ent.label_) for ent in doc.ents]
