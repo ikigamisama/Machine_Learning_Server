@@ -9,3 +9,4 @@ textblob==0.17.1
 pyspellchecker==0.8.2
 seaborn==0.13.2
 matplotlib==3.9.2
+python-multipart==0.0.6
