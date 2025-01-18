@@ -1,9 +1,13 @@
 import pandas as pd
 import uvicorn
-from fastapi import FastAPI
+import seaborn as sns
+import matplotlib.pyplot as plt
+from fastapi import FastAPI, UploadFile, File
 from training import LoanApprovalPredictionProcess
 from spellchecker import SpellChecker
 from textblob import TextBlob
+from io import BytesIO, StringIO
+import base64
 
 app = FastAPI()
 spell = SpellChecker()
@@ -76,6 +80,91 @@ def nlp_grammar_spelling(data: dict):
                 "average_word_length": avg_word_length
             },
             "corrected_text": corrected_text
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post('/visualization/data-chart/')
+def data_visualization(data: dict):
+    try:
+        x_axis = data.get("xAxis")
+        y_axis = data.get("yAxis")
+        plot_type = data.get("plotType")
+        plot_data = pd.DataFrame(data.get("data"))
+
+        # Create the plot
+        plt.figure(figsize=(12, 8))
+
+        match plot_type:
+            case "Scatter Plot":
+                sns.scatterplot(data=plot_data, x=x_axis, y=y_axis)
+            case "Line Plot":
+                sns.lineplot(data=plot_data, x=x_axis, y=y_axis)
+            case "Bar Plot":
+                sns.barplot(data=plot_data, x=x_axis, y=y_axis)
+            case "Count Plot":
+                sns.countplot(data=plot_data, x=x_axis, hue=y_axis)
+            case "Heatmap":
+                pivot_data = plot_data.pivot_table(
+                    index=x_axis, columns=y_axis, aggfunc="size", fill_value=0)
+                sns.heatmap(pivot_data, annot=True, fmt="d", cmap="Blues")
+            case "Box Plot":
+                sns.boxplot(data=plot_data, x=x_axis, y=y_axis)
+            case "Violin Plot":
+                sns.violinplot(data=plot_data, x=x_axis, y=y_axis)
+            case "Swarm Plot":
+                sns.swarmplot(data=plot_data, x=x_axis, y=y_axis)
+            case "Joint Plot":
+                sns.jointplot(data=plot_data, x=x_axis,
+                              y=y_axis, kind="scatter")
+            case "Pair Plot":
+                sns.pairplot(plot_data, vars=[x_axis, y_axis])
+            case "Hexbin Plot":
+                plt.hexbin(plot_data[x_axis], plot_data[y_axis],
+                           gridsize=25, cmap="Blues")
+                plt.colorbar(label="Counts")
+                plt.xlabel(x_axis)
+                plt.ylabel(y_axis)
+            case _:
+                return {"error": f"Unsupported plot type: {plot_type}"}
+
+        plt.title(f"{plot_type} of {x_axis} vs {y_axis}")
+        plt.xticks(rotation=90)
+        # Save the plot to a BytesIO stream
+        buffer = BytesIO()
+        plt.savefig(buffer, format="png")
+        buffer.seek(0)
+        plt.close()
+
+        base64_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        return {"image": base64_image}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post('/data-visualization/csv_file')
+async def csv_file(file: UploadFile = File(...)):
+    try:
+        # Read the uploaded file content
+        content = await file.read()
+        csv_data = StringIO(content.decode("utf-8"))
+        df = pd.read_csv(csv_data)
+
+        num_rows, num_columns = df.shape
+        column_names = list(df.columns)
+        data = df.to_dict(orient="records")
+
+        return {
+            "message": "CSV file processed successfully.",
+            "file_name": file.filename,
+            "file_size": len(content),
+            "num_rows": num_rows,
+            "num_columns": num_columns,
+            "columns": column_names,
+            "data": data,
         }
 
     except Exception as e:
